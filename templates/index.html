@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>CAPSAICIN - Giriş</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>🌶️ CAPSAICIN</h1>
+    <p><strong>Kapsaisin Gücüyle Savunma</strong></p>
+
+    <form id="loginForm">
+      <input type="text" name="username" placeholder="Kullanıcı adı" required><br>
+      <input type="password" name="password" placeholder="Şifre" required><br>
+      <button type="submit">Giriş Yap</button>
+    </form>
+
+    <div id="result"></div>
+
+    <br>
+    <p>Hesabın yok mu? <a href="/register">Kayıt Ol</a></p>
+  </div>
+
+  <script>
+    document.getElementById('loginForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const form = new FormData(e.target);
+      const res = await fetch('/login', { method: 'POST', body: form });
+      const data = await res.json();
+
+      if (data.success && data.redirect) {
+        window.location.href = data.redirect;
+      } else {
+        document.getElementById('result').innerHTML = 
+          `<p style="color:red">${data.error}</p>`;
+      }
+    };
+  </script>
+</body>
+</html>

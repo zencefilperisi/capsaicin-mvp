@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>CAPSAICIN - Dashboard</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>🌶️ CAPSAICIN Dashboard</h1>
+    <p><strong>Kapsaisin Gücüyle Savunma</strong></p>
+
+    <div class="stats">
+  <a href="/attacks?filter=total" class="card-link">
+    <div class="card">
+      <h3>Toplam Saldırı</h3>
+      <p class="big">{{ total_attacks }}</p>
+    </div>
+  </a>
+  <a href="/attacks?filter=max_shu" class="card-link">
+    <div class="card">
+      <h3>Maksimum SHU</h3>
+      <p class="big">{{ max_shu }}</p>
+    </div>
+  </a>
+</div>
+
+    <h3>Engellenen IP'ler</h3>
+    <ul>
+      {% for ip in blocked_ips %}
+        <li>{{ ip }} <span style="color:red">BLOCKED</span></li>
+      {% endfor %}
+    </ul>
+
+    <br>
+    <a href="/attacks">Saldırı Logları</a> | 
+    <a href="/settings">Ayarlar</a> | 
+    <a href="/logout">Çıkış</a>
+  </div>
+</body>
+</html>

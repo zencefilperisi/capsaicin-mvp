@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>CAPSAICIN - Saldırı Logları</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>🔥 Saldırı Logları</h1>
+    {% if highlight %}
+  <p style="color: #ff6666; font-weight: bold;">{{ highlight }}</p>
+{% endif %}
+    <p>Son 24 saatte engellenen girişler:</p>
+    <table>
+      <tr><th>Zaman</th><th>IP</th><th>SHU</th><th>Sonuç</th></tr>
+      <tr><td>14:22:10</td><td>192.168.1.100</td><td>1.2M</td><td>Engellendi</td></tr>
+      <tr><td>14:20:05</td><td>203.0.113.45</td><td>800k</td><td>Gecikmeli</td></tr>
+    </table>
+    <br><a href="/dashboard">← Dashboard</a>
+  </div>
+</body>
+</html>
