@@ -1,4 +1,3 @@
-# app.py
 from flask import Flask, request, render_template, jsonify, session, redirect, url_for
 from capsaicin_engine import (
     init_redis, r, get_ip, process_login, trigger_honeypot,
@@ -51,42 +50,40 @@ HONEYPOT_CHAIN = [
     ("/final-trap", "Sonsuz Yükleme", "Yükleniyor... (sonsuza dek)"),
 ]
 
-for path, title, next_link in HONEYPOT_CHAIN:
-    @app.route(path)
-    def create_honeypot():
-        current_path = path
-        current_title = title
-        current_next = next_link
+def make_honeypot(path, title, next_link):
+    def honeypot():
+        ip = get_ip()
+        trigger_honeypot(ip, path)
 
-        def honeypot():
-            ip = get_ip()
-            trigger_honeypot(ip, current_path)
-
-            if current_path == "/final-trap":
-                return f"""
-                <div class="loading-screen">
-                    <div class="spinner"></div>
-                    <div class="loading-text">{current_next}</div>
-                </div>
-                <script>
-                    setTimeout(() => {{
-                        const gotcha = document.createElement('div');
-                        gotcha.className = 'gotcha';
-                        gotcha.innerText = 'GOTCHA! BOT TUZAĞA DÜŞTÜ!';
-                        document.body.appendChild(gotcha);
-                    }}, 3000);
-                </script>
-                """, 200
-
+        if path == "/final-trap":
             return f"""
-            <div style="text-align:center; padding:100px; font-family:sans-serif; color:#fff; background:#000;">
-                <h1>{current_title}</h1>
-                <p>{current_next}</p>
-                <br><a href="/dashboard" style="color:#ff6666;">Dashboard'a dön</a>
+            <div class="loading-screen">
+                <div class="spinner"></div>
+                <div class="loading-text">{next_link}</div>
             </div>
+            <script>
+                setTimeout(() => {{
+                    const gotcha = document.createElement('div');
+                    gotcha.className = 'gotcha';
+                    gotcha.innerText = 'GOTCHA! BOT TUZAĞA DÜŞTÜ!';
+                    document.body.appendChild(gotcha);
+                }}, 3000);
+            </script>
             """, 200
 
-        return honeypot
+        return f"""
+        <div style="text-align:center; padding:100px; font-family:sans-serif; color:#fff; background:#000;">
+            <h1>{title}</h1>
+            <p>{next_link}</p>
+            <br><a href="/dashboard" style="color:#ff6666;">Dashboard'a dön</a>
+        </div>
+        """, 200
+    # Flask'ı dinamik route ekleme konusunda kandırıyoruz
+    honeypot.__name__ = f"honeypot_{path.replace('/', '')}"
+    app.route(path)(honeypot)
+
+for path, title, next_link in HONEYPOT_CHAIN:
+    make_honeypot(path, title, next_link)
 
 # --- Dashboard ---
 @app.route('/dashboard')
