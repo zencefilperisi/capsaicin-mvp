@@ -1,41 +1,21 @@
+# app.py
 from flask import Flask, request, render_template, jsonify, session, redirect, url_for
+from capsaicin_engine import (
+    init_redis, r, get_ip, process_login, trigger_honeypot,
+    get_shu, add_shu, log_attack
+)
+import logging
 import time
-from collections import defaultdict
+
+# Logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.secret_key = 'capsaicin_secret_2025'  # Oturum için
+app.secret_key = 'capsaicin_secret_2025'
 
-# --- Kapsaisin Motoru ---
-class CapsaicinEngine:
-    def __init__(self):
-        self.threat_log = defaultdict(list)
-        self.shu_levels = {
-            "normal": 0,
-            "suspicious": 5000,
-            "brute_force": 100000,
-            "scanner": 500000,
-            "aggressive": 1000000
-        }
-
-    def calculate_shu(self, ip, path, user_agent, login_attempts=0):
-        now = time.time()
-        attempts = self.threat_log[ip]
-
-        recent = [t for t in attempts if now - t < 10]
-        if len(recent) > 5:
-            return self.shu_levels["scanner"]
-
-        if "/login" in path and login_attempts > 2:
-            return self.shu_levels["brute_force"]
-
-        if "bot" in user_agent.lower():
-            return self.shu_levels["suspicious"]
-
-        self.threat_log[ip] = [t for t in attempts if now - t < 60]
-        self.threat_log[ip].append(now)
-        return self.shu_levels["normal"]
-
-capsaicin = CapsaicinEngine()
+# Redis başlat (uygulama ilk yüklendiğinde)
+init_redis()
 
 # --- Ana Sayfalar ---
 @app.route('/')
@@ -46,70 +26,128 @@ def index():
 
 @app.route('/login', methods=['POST'])
 def login():
-    ip = request.remote_addr
-    user_agent = request.headers.get('User-Agent', '')
+    ip = get_ip()
     username = request.form.get('username', '')
     password = request.form.get('password', '')
 
-    login_attempts = request.cookies.get(f'attempts_{ip}', '0')
-    attempts = int(login_attempts) + 1 if username else 0
-
-    shu = capsaicin.calculate_shu(ip, request.path, user_agent, attempts)
-
-    # ACILI YANIT
-    if shu > 50000:
-        delay = min(shu / 200000, 5)
-        time.sleep(delay)
-        resp = jsonify({"error": "Sunucu meşgul. Lütfen daha sonra deneyin."})
-        resp.status_code = 429
-        resp.set_cookie(f'attempts_{ip}', str(attempts), max_age=300)
-        return resp
-
-    # BAŞARILI GİRİŞ
+    # Gerçek admin girişi (korundu)
     if username == "admin" and password == "123":
         session['logged_in'] = True
-        resp = jsonify({"success": True, "redirect": "/dashboard"})
-        resp.set_cookie(f'attempts_{ip}', '0', max_age=300)
-        return resp
+        # IP'yi temizle
+        if r:
+            r.delete(f"attempt:{ip}")
+            r.delete(f"shu:{ip}")
+        return jsonify({"success": True, "redirect": "/dashboard"})
 
-    # Yanlış giriş
-    resp = jsonify({"error": "Kullanıcı adı veya şifre yanlış."})
-    resp.set_cookie(f'attempts_{ip}', str(attempts), max_age=300)
-    return resp, 401
+    # Tuzağa düşür (5. denemede sahte başarı)
+    result = process_login(ip)
+    return jsonify(result), 200 if result.get("success") else 401
 
-# --- Dashboard ve Diğer Sayfalar ---
+# --- Honeypot Zinciri ---
+HONEYPOT_CHAIN = [
+    ("/superadmin", "Sahte Admin Paneli", "Config dosyası: <a href='/config.json'>/config.json</a>"),
+    ("/config.json", "Sahte Config Dosyası", "Backup: <a href='/backup.zip'>/backup.zip</a>"),
+    ("/backup.zip", "Sahte Backup ZIP", "Final: <a href='/final-trap'>/final-trap</a>"),
+    ("/final-trap", "Sonsuz Yükleme", "Yükleniyor... (sonsuza dek)"),
+]
+
+for path, title, next_link in HONEYPOT_CHAIN:
+    @app.route(path)
+    def create_honeypot():
+        current_path = path
+        current_title = title
+        current_next = next_link
+
+        def honeypot():
+            ip = get_ip()
+            trigger_honeypot(ip, current_path)
+
+            if current_path == "/final-trap":
+                return f"""
+                <div class="loading-screen">
+                    <div class="spinner"></div>
+                    <div class="loading-text">{current_next}</div>
+                </div>
+                <script>
+                    setTimeout(() => {{
+                        const gotcha = document.createElement('div');
+                        gotcha.className = 'gotcha';
+                        gotcha.innerText = 'GOTCHA! BOT TUZAĞA DÜŞTÜ!';
+                        document.body.appendChild(gotcha);
+                    }}, 3000);
+                </script>
+                """, 200
+
+            return f"""
+            <div style="text-align:center; padding:100px; font-family:sans-serif; color:#fff; background:#000;">
+                <h1>{current_title}</h1>
+                <p>{current_next}</p>
+                <br><a href="/dashboard" style="color:#ff6666;">Dashboard'a dön</a>
+            </div>
+            """, 200
+
+        return honeypot
+
+# --- Dashboard ---
 @app.route('/dashboard')
 def dashboard():
     if not session.get('logged_in'):
         return redirect(url_for('index'))
-    
-    # Gerçek veri (örnek)
-    total_attacks = 127
-    max_shu = 1500000
-    blocked_ips = ['192.168.1.100', '203.0.113.45', '10.0.0.5']
-    
-    return render_template('dashboard.html', 
-                         total_attacks=total_attacks,
-                         max_shu=max_shu,
-                         blocked_ips=blocked_ips,
-                         username=session.get('username'))
 
+    ip = get_ip()
+
+    # Veriler (Redis'ten)
+    total_attacks = 0 if r is None else r.llen("attack_log")
+    max_shu_val = 0
+    blocked_ips = []
+
+    if r:
+        all_shu_keys = r.keys("shu:*")
+        shu_values = [get_shu(ip.split(":", 1)[1]) for ip in all_shu_keys] if all_shu_keys else []
+        max_shu_val = max(shu_values) if shu_values else 0
+        blocked_ips = [ip.split(":", 1)[1] for ip in all_shu_keys if get_shu(ip.split(":", 1)[1]) > 500000]
+
+    # Zincir durumu
+    chain_steps = [step[0] for step in HONEYPOT_CHAIN]
+    chain_status = {}
+    if r:
+        for step in chain_steps:
+            chain_status[step] = bool(r.get(f"chain:{step}:{ip}"))
+
+    # Son loglar
+    logs = []
+    if r:
+        logs = r.lrange("attack_log", 0, 49)
+
+    return render_template('dashboard.html',
+                         total_attacks=total_attacks,
+                         max_shu=max_shu_val,
+                         blocked_ips=blocked_ips,
+                         chain_steps=chain_steps,
+                         chain_status=chain_status,
+                         logs=logs)
+
+# --- Saldırı Logları ---
 @app.route('/attacks')
 def attacks():
     if not session.get('logged_in'):
         return redirect(url_for('index'))
-    
-    filter_type = request.args.get('filter')
-    
-    if filter_type == 'total':
+
+    logs = []
+    if r:
+        logs = r.lrange("attack_log", 0, 99)
+
+    highlight = request.args.get('filter')
+    if highlight == 'total':
         highlight = "Tüm saldırılar listeleniyor."
-    elif filter_type == 'max_shu':
+    elif highlight == 'max_shu':
         highlight = "En yüksek SHU'lu saldırılar."
     else:
         highlight = None
 
-    return render_template('attacks.html', highlight=highlight)
+    return render_template('attacks.html', logs=logs, highlight=highlight)
 
+# --- Diğer ---
 @app.route('/settings')
 def settings():
     if not session.get('logged_in'):
@@ -121,5 +159,10 @@ def logout():
     session.pop('logged_in', None)
     return redirect(url_for('index'))
 
+# --- Hata Sayfası (Redis yoksa) ---
+@app.errorhandler(500)
+def internal_error(error):
+    return "<h1>Redis başlatılıyor... Lütfen 10 saniye bekleyin.</h1>", 503
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=False)

@@ -6,17 +6,24 @@
 </head>
 <body>
   <div class="container">
-    <h1>🔥 Saldırı Logları</h1>
+    <h1>Saldırı Logları</h1>
     {% if highlight %}
-  <p style="color: #ff6666; font-weight: bold;">{{ highlight }}</p>
-{% endif %}
-    <p>Son 24 saatte engellenen girişler:</p>
+      <p style="color: #ff6666; font-weight: bold;">{{ highlight }}</p>
+    {% endif %}
+    <p>Son 100 olay:</p>
     <table>
-      <tr><th>Zaman</th><th>IP</th><th>SHU</th><th>Sonuç</th></tr>
-      <tr><td>14:22:10</td><td>192.168.1.100</td><td>1.2M</td><td>Engellendi</td></tr>
-      <tr><td>14:20:05</td><td>203.0.113.45</td><td>800k</td><td>Gecikmeli</td></tr>
+      <tr><th>Zaman</th><th>IP</th><th>Tür</th><th>Detay</th></tr>
+      {% for log in logs %}
+        {% set parts = log.split(' | ') %}
+        <tr>
+          <td>{{ parts[0] }}</td>
+          <td>{{ parts[1] }}</td>
+          <td>{{ parts[2] }}</td>
+          <td>{{ parts[3] if parts|length > 3 else '' }}</td>
+        </tr>
+      {% endfor %}
     </table>
-    <br><a href="/dashboard">← Dashboard</a>
+    <br><a href="/dashboard">Dashboard</a>
   </div>
 </body>
 </html>

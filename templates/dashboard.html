@@ -6,28 +6,48 @@
 </head>
 <body>
   <div class="container">
-    <h1>🌶️ CAPSAICIN Dashboard</h1>
+    <h1>CAPSAICIN Dashboard</h1>
     <p><strong>Kapsaisin Gücüyle Savunma</strong></p>
 
     <div class="stats">
-  <a href="/attacks?filter=total" class="card-link">
-    <div class="card">
-      <h3>Toplam Saldırı</h3>
-      <p class="big">{{ total_attacks }}</p>
+      <a href="/attacks?filter=total" class="card-link">
+        <div class="card">
+          <h3>Toplam Saldırı</h3>
+          <p class="big">{{ total_attacks }}</p>
+        </div>
+      </a>
+      <a href="/attacks?filter=max_shu" class="card-link">
+        <div class="card">
+          <h3>Maksimum SHU</h3>
+          <p class="big">{{ max_shu }}</p>
+        </div>
+      </a>
     </div>
-  </a>
-  <a href="/attacks?filter=max_shu" class="card-link">
-    <div class="card">
-      <h3>Maksimum SHU</h3>
-      <p class="big">{{ max_shu }}</p>
+
+    <!-- HONEYPOT ZİNCİRİ -->
+    <div class="chain-container">
+      <div class="chain-title">Honeypot Zinciri</div>
+      <div class="chain-steps">
+        {% for step in chain_steps %}
+        <div class="chain-step {% if chain_status[step] %}active{% endif %}">
+          <div class="icon">{% if chain_status[step] %}✓{% else %}○{% endif %}</div>
+          <div class="chain-step-label">{{ step[1:] }}</div>
+        </div>
+        {% endfor %}
+      </div>
     </div>
-  </a>
-</div>
 
     <h3>Engellenen IP'ler</h3>
     <ul>
       {% for ip in blocked_ips %}
         <li>{{ ip }} <span style="color:red">BLOCKED</span></li>
+      {% endfor %}
+    </ul>
+
+    <h3>Son Saldırılar</h3>
+    <ul>
+      {% for log in logs %}
+        <li style="text-align:left; font-size:0.9em;">{{ log }}</li>
       {% endfor %}
     </ul>
 
